@@ -17,20 +17,14 @@ class CBL_CNN(nn.Module):
 
         # CBL parameters
         self.T = T
-        self.alpha = alpha
+        # Make alpha learnable
+        self.alpha = nn.Parameter(torch.tensor([alpha]), requires_grad=True)
         self.z_dim = 64
 
         # Context vector from final output
         self.g = nn.Linear(num_classes, self.z_dim)
 
         # Adapters
-        # We'll refine h1, h2, h3, h4 (outputs after each major stage)
-        # h1 shape: (N,32,32,32)
-        # h2 shape after pool: (N,64,16,16)
-        # h3 shape after pool: (N,128,8,8)
-        # h4 shape: (N,256)
-        # We'll insert a single-channel z-scalar and run a 1x1 conv or linear adapter.
-
         self.adapter_conv1 = nn.Sequential(
             nn.Conv2d(32 + 1, 32, kernel_size=1),
             nn.ReLU()
@@ -54,34 +48,43 @@ class CBL_CNN(nn.Module):
         h2 = self.pool(F.relu(self.conv2(h1)))  # (N,64,16,16)
         h3 = self.pool(F.relu(self.conv3(h2)))  # (N,128,8,8)
         h3_flat = h3.view(h3.size(0), -1)       # (N,8192)
-        h4 = F.relu(self.fc1(h3_flat))           # (N,256)
-        y = self.fc2(h4)                         # (N,num_classes)
+        h4 = F.relu(self.fc1(h3_flat))          # (N,256)
+        y = self.fc2(h4)                        # (N,num_classes)
         return h1, h2, h3, h4, y
 
     def refine_step(self, h1, h2, h3, h4, y):
         # Compute context vector z
-        z = self.g(y) # (N,z_dim)
+        z = self.g(y)  # (N, z_dim)
 
         # Use mean of z to create a scalar channel
-        z_scalar = z.mean(dim=1, keepdim=True) # (N,1)
+        z_scalar = z.mean(dim=1, keepdim=True)  # (N, 1)
 
         # Refine h1
-        h1_input = torch.cat([h1, z_scalar.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, h1.size(2), h1.size(3))], dim=1)
+        h1_input = torch.cat(
+            [h1, z_scalar.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, h1.size(2), h1.size(3))],
+            dim=1
+        )
         h1_new = self.adapter_conv1(h1_input)
         h1_refined = self.alpha * h1 + (1 - self.alpha) * h1_new
 
         # Refine h2
-        h2_input = torch.cat([h2, z_scalar.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, h2.size(2), h2.size(3))], dim=1)
+        h2_input = torch.cat(
+            [h2, z_scalar.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, h2.size(2), h2.size(3))],
+            dim=1
+        )
         h2_new = self.adapter_conv2(h2_input)
         h2_refined = self.alpha * h2 + (1 - self.alpha) * h2_new
 
         # Refine h3
-        h3_input = torch.cat([h3, z_scalar.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, h3.size(2), h3.size(3))], dim=1)
+        h3_input = torch.cat(
+            [h3, z_scalar.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, h3.size(2), h3.size(3))],
+            dim=1
+        )
         h3_new = self.adapter_conv3(h3_input)
         h3_refined = self.alpha * h3 + (1 - self.alpha) * h3_new
 
         # Refine h4
-        h4_input = torch.cat([h4, z], dim=1)  # (N,256+64)
+        h4_input = torch.cat([h4, z], dim=1)  # (N, 256+64)
         h4_new = self.adapter_fc1(h4_input)
         h4_refined = self.alpha * h4 + (1 - self.alpha) * h4_new
 
