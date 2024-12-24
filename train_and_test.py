@@ -85,7 +85,7 @@ def run_single_experiment(args, run_id=1):
     lr = args.lr
     epochs = args.epochs
 
-    print(f"\n=== Run {run_id}: Training Standard CNN and CBL CNN (T={args.T}, alpha={args.alpha}) ===")
+    print(f"\n=== Run {run_id}: Training Standard CNN and CBL CNN (T={args.T} ===")
 
     # To ensure reproducibility for this run (if you vary seeds between runs)
     seed_for_this_run = 1234 + run_id  # or any scheme you like
@@ -150,7 +150,7 @@ def run_single_experiment(args, run_id=1):
     # 2) Train CBL CNN
     ############################################################################
     print("\nTraining CBL CNN...")
-    cbl_model = CBL_CNN(num_classes=10, T=args.T, alpha=args.alpha).to(device)
+    cbl_model = CBL_CNN(num_classes=10, T=args.T).to(device)
     optimizer_cbl = optim.Adam(cbl_model.parameters(), lr=lr)
 
     cbl_train_losses = []
@@ -178,6 +178,9 @@ def run_single_experiment(args, run_id=1):
     if run_id == 1:
         epochs_range = range(1, epochs+1)
 
+        import matplotlib as mpl
+        mpl.rcParams['lines.markersize'] = 5 # Increase marker size
+        
         # Prepare data for plotting
         # Accuracy DataFrame
         df_acc = pd.DataFrame({
@@ -196,14 +199,14 @@ def run_single_experiment(args, run_id=1):
         sns.set_style("whitegrid")
 
         # Plot Validation Accuracy
-        plt.figure(figsize=(10,6))
+        plt.figure(figsize=(6,4))
         sns.lineplot(data=df_acc, x='Epoch', y='Accuracy', hue='Model', marker='o')
         plt.title('Validation Accuracy Comparison (CIFAR-10)')
         plt.savefig('plots/validation_accuracy_comparison_cifar10.png')
         plt.close()
 
         # Plot Validation Loss
-        plt.figure(figsize=(10,6))
+        plt.figure(figsize=(6,4))
         sns.lineplot(data=df_loss, x='Epoch', y='Loss', hue='Model', marker='o')
         plt.title('Validation Loss Comparison (CIFAR-10)')
         plt.savefig('plots/validation_loss_comparison_cifar10.png')
@@ -231,6 +234,7 @@ def run_single_experiment(args, run_id=1):
             'Accuracy': cbl_val_accs,
             'Dataset': ['Val']*epochs
         })])
+        
 
         # Standard CNN Accuracy (Train vs Val)
         plt.figure(figsize=(10,6))
@@ -261,11 +265,10 @@ def main():
     """
     parser = argparse.ArgumentParser(description="Train and test standard and CBL CNN on CIFAR-10")
     parser.add_argument('--batch_size', type=int, default=128)
-    parser.add_argument('--epochs', type=int, default=20)
+    parser.add_argument('--epochs', type=int, default=75)
     parser.add_argument('--lr', type=float, default=0.001)
     parser.add_argument('--device', type=str, default='cuda' if torch.cuda.is_available() else 'cpu')
-    parser.add_argument('--T', type=int, default=2)
-    parser.add_argument('--alpha', type=float, default=0.0)
+    parser.add_argument('--T', type=int, default=4)
     parser.add_argument('--num_runs', type=int, default=5,
                         help="Number of repeated runs for statistical significance tests.")
     args = parser.parse_args()
